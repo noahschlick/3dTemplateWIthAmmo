@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import * as CANNON from 'cannon-es';
+import { Box } from './MaterialObjects/box';
+import { Sphere } from './MaterialObjects/sphere';
+import { Ground } from './MaterialObjects/ground';
+import { GroundPhysics } from './PhisicsObjects/GroundPhysics';
+import { BoxPhysics } from './PhisicsObjects/BoxPhysics';
+import { SpherePhysics } from './PhisicsObjects/SpherePhysics';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -32,91 +38,50 @@ scene.add(gridHelper);
 const axesHelper = new THREE.AxesHelper(4);
 scene.add(axesHelper);
 
-// Add Box
-const boxGeo = new THREE.BoxGeometry(2, 2, 2);
-const boxMat = new THREE.MeshBasicMaterial({
-  color: 0x00ff00,
-  wireframe: true
-});
-const boxMesh = new THREE.Mesh(boxGeo, boxMat);
-scene.add(boxMesh);
+// Add Sphere Material
+const sphere = new Sphere(0xff0000, 2)
+scene.add(sphere.getMesh())
 
-// Add Sphere
-const sphereGeo = new THREE.SphereGeometry(2);
-const sphereMat = new THREE.MeshBasicMaterial({
-  color: 0xff0000,
-  wireframe: true
-});
-const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
-scene.add(sphereMesh)
+// Add Box Material
+const box = new Box(0x00ff00, {x: 2, y: 2, z: 2})
+scene.add(box.getBoxMesh());
 
-// Add Ground
-const groundGeo = new THREE.PlaneGeometry(30, 30);
-const groundMat = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  side: THREE.DoubleSide,
-  wireframe: true
-});
-
-const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-scene.add(groundMesh);
+// Add Ground Material
+const ground = new Ground(0xffffff, {x: 30, y: 30})
+scene.add(ground.getGroundMesh())
 
 // Create Gravity
 const world = new CANNON.World({
   gravity: new CANNON.Vec3(0, -9.81, 0)
 });
 
-// Make a phisics ground body
-const groundPhysMat = new CANNON.Material(); // Material helps with setting how objects react when they hit the ground
+// Ground Physics
+const groundPhys = new GroundPhysics({x: 15, y: 15, z: 0.1})
+world.addBody(groundPhys.getBody())
+groundPhys.setQuaternionFromEuler(-Math.PI / 2, 0, 0)
 
-const groundBody = new CANNON.Body({
-  shape: new CANNON.Box(new CANNON.Vec3(15, 15, 0.1)),
-  //mass: 0
-  type: CANNON.Body.STATIC,
-  material: groundPhysMat
-})
-world.addBody(groundBody)
-groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-
-// Add box phisics body
-const boxPhysMat = new CANNON.Material();
-
-const boxBody = new CANNON.Body({
-  shape: new CANNON.Box(new CANNON.Vec3(1, 1, 1)),
-  mass: 1,
-  position: new CANNON.Vec3(3, 20, 0),
-  material: boxPhysMat
-});
-world.addBody(boxBody);
-
-// modify the velocity
-boxBody.angularVelocity.set(0, 10, 0);
-boxBody.angularDamping = 0.5
+// Add box physics body
+const boxPhys = new BoxPhysics({x: 1, y: 1, z: 1}, {x: 3, y: 20, z: 0})
+world.addBody(boxPhys.getBody())
+boxPhys.setVelocity(0, 10, 0)
+boxPhys.setAngularDamping(0.5)
 
 // Add contact centext between ground and box
 const groundBoxContactMat = new CANNON.ContactMaterial(
-  groundPhysMat,
-  boxPhysMat,
+  groundPhys.getPhysMat(),
+  boxPhys.getPhysMat(),
   {friction: 0.04}
 )
 world.addContactMaterial(groundBoxContactMat);
 
-// Add sphere phisics body
-const spherePhysMat = new CANNON.Material();
-
-const sphereBody = new CANNON.Body({
-  mass: 10,
-  shape: new CANNON.Sphere(2),
-  position: new CANNON.Vec3(0, 15, 0),
-  material: spherePhysMat
-});
-world.addBody(sphereBody)
-
-sphereBody.linearDamping = 0.31 // Add air resistance to the sphere
+// Add sphere physics body
+const spherePhys = new SpherePhysics(2, {x: 0, y: 15, z: 0});
+world.addBody(spherePhys.getBody());
+spherePhys.setLinearDamping(0.31);
 
 const groundSphereContactMat = new CANNON.ContactMaterial(
-  groundPhysMat,
-  spherePhysMat,
+  groundPhys.getPhysMat(),
+  spherePhys.getPhysMat(),
   {restitution: 0.9}
 );
 
@@ -128,14 +93,9 @@ const timeStep = 1 / 60;
 function animate() {
   world.step(timeStep)
 
-  groundMesh.position.copy(groundBody.position);
-  groundMesh.quaternion.copy(groundBody.quaternion);
-
-  boxMesh.position.copy(boxBody.position);
-  boxMesh.quaternion.copy(boxBody.quaternion);
-
-  sphereMesh.position.copy(sphereBody.position);
-  sphereMesh.quaternion.copy(sphereBody.quaternion);
+  ground.mergePhysics(groundPhys.getPosition(), groundPhys.getQuaternion());
+  box.mergePhysics(boxPhys.getPosition(), boxPhys.getQuaternion());
+  sphere.mergePhysics(spherePhys.getPosition(), spherePhys.getQuaternion());
 
   renderer.render(scene, camera);
 }
